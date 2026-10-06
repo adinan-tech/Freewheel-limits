@@ -4,16 +4,16 @@
 
 Build two independent alerting workstreams:
 
-1. **Limit warnings first:** Email when selected OCI resource usage crosses a configurable warning threshold below the hard limit. The warning threshold does not change the OCI limit.
-2. **Cloud Guard later:** Email selected security findings detected by Cloud Guard. This workstream does not depend on the limit checker.
+1. **Part A — Limit warnings (first):** Email when selected OCI resource usage crosses a configurable warning threshold below the hard limit. The warning threshold does not change the OCI limit.
+2. **Part B — Cloud Guard findings (later):** Email selected security findings detected by Cloud Guard. This workstream does not depend on the limit checker.
 
 The workstreams may share an OCI Notifications topic and recipients. Keep them separate from the existing limit increase and region-copy project; reuse discovery code only if useful.
 
-See the editable [draw.io limit-warning flow](limits-alert-flow.drawio) and its [notes](ARCHITECTURE.md). Confirm the design during phase 1.
+See the editable [Part A draw.io flow](limits-alert-flow.drawio) and its [notes](ARCHITECTURE.md). Confirm the design during phase 1.
 
 Mark a phase complete only after its completion criteria are verified. Record the evidence and date in the progress log. Do not mark a phase complete merely because code was written.
 
-## Limit warnings
+## Part A — Limit warnings
 
 ### [ ] 1. Define and validate initial limits
 
@@ -40,7 +40,7 @@ Mark a phase complete only after its completion criteria are verified. Record th
 
 **Done when:** The agreed policy limit and expanded cases are tested, deployment is repeatable, and the customer accepts the limit-warning behavior.
 
-## Cloud Guard findings (after limit warnings)
+## Part B — Cloud Guard findings (after Part A)
 
 ### [ ] 4. Define Cloud Guard alert scope
 
@@ -58,17 +58,18 @@ Mark a phase complete only after its completion criteria are verified. Record th
 
 ## Open decisions
 
-### Limit warnings
+### Part A — Limit warnings
 
 - Exact first compute and storage limit names and scopes.
 - Which IAM policy ceiling matters: policy objects, statements per policy, or statements per compartment hierarchy.
 - Thresholds, check frequency, recipients, regions, compartments, and customer tenancy access.
 - Direct Notifications or custom metrics plus Monitoring alarms for the MVP.
 
-### Cloud Guard (decide later)
+### Part B — Cloud Guard (decide later)
 
 - Reporting region, targets, finding filters, and recipients.
 
 ## Progress log
 
 - 2026-10-06: Plan reordered into limit warnings first and Cloud Guard findings later; no phase completed yet.
+- 2026-10-06: Named the workstreams Part A (limit warnings) and Part B (Cloud Guard findings).
