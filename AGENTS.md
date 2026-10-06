@@ -6,7 +6,8 @@
 - At the start of each task, read `PROJECT_PLAN.md` and work from its current phase.
 - When a phase meets its completion criteria, mark it done in `PROJECT_PLAN.md` and record the evidence.
 - If local changes or branch differences exist, inspect them before proceeding; do not overwrite or commit unrelated work.
-- At the end of each task that changes files, commit only the requested changes, push to `origin/main`, and verify that local and remote `main` match. Report any failed sync.
+- Do not commit or push after each task. Keep requested changes local until the daily sync checkpoint or an explicit request to sync sooner.
+- At the daily 18:00 Europe/Bucharest checkpoint, review the diff, commit only requested changes, push to `origin/main`, and verify that local and remote `main` match. If no Codex session is active then, perform the checkpoint in the next active session. Report any failed sync.
 - Confirm the intended scope and inspect the current state before changing an automation.
 - Make operations idempotent so reruns do not duplicate work or corrupt state.
 - Validate inputs and fail clearly when required values are missing or invalid.
