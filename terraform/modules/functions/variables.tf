@@ -13,18 +13,3 @@ variable "app_params" {
     error_message = "Each Functions application requires at least one subnet OCID."
   }
 }
-
-variable "fn_params" {
-  description = "Image-based Functions, keyed by a stable name."
-  type = map(object({
-    application_key             = string
-    display_name                = string
-    image                       = string
-    image_digest                = optional(string)
-    memory_in_mbs               = optional(number, 256)
-    timeout_in_seconds          = optional(number, 120)
-    detached_timeout_in_seconds = optional(number, 120)
-    config                      = optional(map(string), {})
-  }))
-
-}

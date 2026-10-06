@@ -17,7 +17,7 @@ module "scheduled_limit_checker" {
       description             = "Check selected OCI service limits"
       schedule_compartment_id = var.schedule_compartment_id
       function_compartment_id = var.function_compartment_id
-      function_id             = module.functions.function_ids["limit_checker"]
+      function_id             = var.function_id
       recurrence_type         = "CRON"
       recurrence_details      = "0 * * * *" # hourly, UTC
       time_starts             = var.schedule_start_utc # RFC 3339, future time
@@ -28,6 +28,6 @@ module "scheduled_limit_checker" {
 }
 ```
 
-The default provider creates the schedule in the Function's region; `oci.home` creates IAM resources in the tenancy home region. The example assumes a Functions module output named `function_ids`; adapt it to the actual deployment module. Resource Scheduler runs at UTC times and has a one-hour minimum interval. OCI IAM changes may take time to propagate before the first scheduled run. The Terraform identity used to apply this module needs permission to create schedules, dynamic groups, and policies. Function runtime permissions for reading limits belong to the Function's own dynamic group and are outside this module.
+The default provider creates the schedule in the Function's region; `oci.home` creates IAM resources in the tenancy home region. `function_id` is supplied after ZIP deployment. Resource Scheduler runs at UTC times and has a one-hour minimum interval. OCI IAM changes may take time to propagate before the first scheduled run. The Terraform identity used to apply this module needs permission to create schedules, dynamic groups, and policies. Function runtime permissions for reading limits belong to the Function's own dynamic group and are outside this module.
 
-This is an A3 building block, not a completed deployment. A1 must confirm the pilot limits and schedule frequency, and A2 must provide the Function image. Validate the final policy in the pilot tenancy because Oracle's schedule tutorial shows a broader example policy.
+Validate the final policy in the pilot tenancy because Oracle's schedule tutorial shows a broader example policy.

@@ -32,20 +32,20 @@ Mark a phase complete only after its completion criteria are verified. Record th
 
 **Done:** The local `preflight` and `check` commands return structured results for configured monitors. Eight local tests pass with representative OCI definition, value, and availability fields, including AD and regional scopes, changed hard limits, threshold boundary, missing values, unsupported limits, and API errors. Live OCI behavior remains for A3.
 
-### [ ] A3. Deploy OCI infrastructure with Terraform
+### [ ] A3. Deploy OCI infrastructure and code-only Function
 
-- Package the checker and use Terraform to create the OCI Functions application and Function, configure networking and logging, and reuse customer subnets where appropriate.
+- Package the checker as a ZIP and deploy it as a code-only Python Function with OCI CLI. Use Terraform to create the OCI Functions application, configure networking and logging, and reuse customer subnets where appropriate.
 - Use Terraform to create the Resource Scheduler schedule and least-privilege IAM dynamic groups and policies needed to invoke the Function and read limits.
 - Run the scheduled Function in the pilot tenancy and inspect its logs and results.
 
 **Done when:** A scheduled live invocation reads the selected pilot limits successfully; no email alert is required yet.
 
-**Current status:** The Terraform root stack and Thunder-style modules for Functions, invocation logging, reader IAM, and Resource Scheduler are written, along with the Function image package. Deployment is pending a customer-selected tenancy/region, subnet, OCIR image build, provider validation, and a live scheduled invocation. A3 is not complete.
+**Current status:** The ZIP packaging/deployment script and Terraform modules for the Functions application, private archive bucket, invocation logging, reader IAM, and Resource Scheduler are written. Deployment is pending a customer-selected tenancy/region/subnet, OCI CLI 3.94+, provider validation, and a live scheduled invocation. A3 is not complete.
 
 ### [ ] A4. Add warning emails
 
 - Implement the alert path chosen in A1. The current proposal is Function to custom metrics to Monitoring alarms to Notifications email.
-- Use Terraform to create the Monitoring alarms, Notifications topic, and email subscriptions for that path; recipients must confirm their subscriptions.
+- Use Terraform to create the Monitoring alarms, Notifications topic, and email subscriptions for that path. Recipients can include individual addresses or a distribution-list alias; the recipient or list owner must confirm each subscription.
 - Generate an alarm per configured monitor and include its identity, scope, region, and usage in the alert where supported.
 - Verify alert and recovery behavior without repeated unwanted emails.
 
@@ -108,3 +108,4 @@ Mark a phase complete only after its completion criteria are verified. Record th
 - 2026-10-06: Completed A2 local checker, OCI adapter, configuration validation, and eight passing tests. A live tenancy check remains in A3.
 - 2026-10-06: Audited A2 for platform independence. Paths use `pathlib` and the OCI SDK's OS-specific default config lookup; no platform-specific shell or filesystem code is required.
 - 2026-10-06: Built the A3 Function package and Terraform modules/root stack using the Thunder parameter-map pattern. Nine local Python tests pass and Terraform formatting passes; provider download and live OCI validation remain unavailable.
+- 2026-10-06: Revised A3 to use a code-only Python ZIP and OCI CLI instead of an OCIR image. The OCI SDK exceeds the 25 MB direct-upload limit, so Terraform also creates a private Object Storage bucket for the ZIP. Terraform provisions the surrounding resources in two applies. Live scheduled verification remains pending.

@@ -1,13 +1,5 @@
 locals {
   schedule_compartment_id = coalesce(var.schedule_compartment_id, var.function_compartment_id)
-  runtime_config = jsonencode({
-    region             = var.region
-    tenancy_id         = var.tenancy_id
-    subscription_id    = var.subscription_id
-    check_schedule_utc = var.check_schedule_utc
-    email_recipients   = var.email_recipients
-    monitors           = var.monitors
-  })
 }
 
 module "functions" {
@@ -22,21 +14,27 @@ module "functions" {
       shape                      = "GENERIC_X86"
     }
   }
+}
 
-  fn_params = {
-    checker = {
-      application_key             = "checker"
-      display_name                = "${var.name_prefix}_checker"
-      image                       = var.function_image
-      image_digest                = var.function_image_digest
-      memory_in_mbs               = 256
-      timeout_in_seconds          = 120
-      detached_timeout_in_seconds = 120
-      config = {
-        LIMIT_CHECKER_CONFIG = local.runtime_config
-      }
-    }
-  }
+data "oci_objectstorage_namespace" "current" {
+  compartment_id = var.tenancy_id
+}
+
+resource "oci_objectstorage_bucket" "archive" {
+  compartment_id = var.function_compartment_id
+  namespace      = data.oci_objectstorage_namespace.current.namespace
+  name           = "${var.name_prefix}_${replace(var.region, "-", "_")}_${substr(sha1(var.function_compartment_id), 0, 8)}"
+  access_type    = "NoPublicAccess"
+}
+
+resource "oci_identity_policy" "archive_read" {
+  provider       = oci.home
+  compartment_id = var.tenancy_id
+  name           = "${var.name_prefix}_archive_read"
+  description    = "Allow Functions applications in the compartment to read the dedicated ZIP archive bucket"
+  statements = [
+    "Allow any-user to read objects in compartment id ${var.function_compartment_id} where all {request.principal.type = 'fnapp', request.principal.compartment.id = '${var.function_compartment_id}', target.bucket.name = '${oci_objectstorage_bucket.archive.name}'}",
+  ]
 }
 
 module "function_logging" {
@@ -55,6 +53,7 @@ module "function_logging" {
 }
 
 module "function_reader_iam" {
+  count  = var.function_id == null ? 0 : 1
   source = "./modules/function_reader_iam"
   providers = {
     oci = oci.home
@@ -63,7 +62,7 @@ module "function_reader_iam" {
   tenancy_id = var.tenancy_id
   reader_params = {
     checker = {
-      function_id        = module.functions.function_ids["checker"]
+      function_id        = var.function_id
       dynamic_group_name = "${var.name_prefix}_reader"
       policy_name        = "${var.name_prefix}_read_limits"
     }
@@ -71,6 +70,7 @@ module "function_reader_iam" {
 }
 
 module "scheduled_functions" {
+  count  = var.function_id == null ? 0 : 1
   source = "./modules/scheduled_functions"
   providers = {
     oci      = oci
@@ -84,7 +84,7 @@ module "scheduled_functions" {
       description             = "Run the OCI service-limit checker"
       schedule_compartment_id = local.schedule_compartment_id
       function_compartment_id = var.function_compartment_id
-      function_id             = module.functions.function_ids["checker"]
+      function_id             = var.function_id
       recurrence_type         = "CRON"
       recurrence_details      = var.check_schedule_utc
       time_starts             = var.schedule_start_utc

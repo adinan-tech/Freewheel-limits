@@ -31,7 +31,7 @@ variable "schedule_compartment_id" {
 }
 
 variable "subnet_ids" {
-  description = "Existing subnets with access to OCI APIs and OCIR."
+  description = "Existing subnets with access to OCI APIs."
   type        = list(string)
 
   validation {
@@ -46,15 +46,15 @@ variable "network_security_group_ids" {
   default     = []
 }
 
-variable "function_image" {
-  description = "Qualified OCIR image name with immutable version tag; build and push before applying Terraform."
-  type        = string
-}
-
-variable "function_image_digest" {
-  description = "Optional sha256 digest to pin the Function image."
+variable "function_id" {
+  description = "Code-only Function OCID written by the ZIP deployment step; null on first apply."
   type        = string
   default     = null
+
+  validation {
+    condition     = var.function_id == null || startswith(var.function_id, "ocid1.fnfunc.")
+    error_message = "function_id must be an OCI Function OCID."
+  }
 }
 
 variable "schedule_start_utc" {

@@ -1,28 +1,29 @@
-# A3: OCI Function deployment
+﻿# A3: deploy the limit checker
 
-This stack follows the [Thunder framework](https://github.com/oracle-quickstart/oci-adoption-framework-thunder) pattern: small Terraform modules use named parameter maps and `for_each`. The modules create a Functions application and Function, an invocation log, a scheduled invocation, and two narrowly scoped identities: the schedule may invoke the Function, and the Function may read service limits. Existing customer subnets are reused.
+This stack uses Thunder-style Terraform modules for the OCI Functions application, invocation log, Resource Scheduler schedule, archive bucket, and least-privilege IAM. The checker itself is a **code-only Python Function** deployed as a ZIP. It needs no Docker image or OCIR repository. The current OCI Terraform provider does not create code-only Functions, so deployment has two Terraform applies with an OCI CLI step between them.
 
-## Before applying
+## Prerequisites
 
-1. Use an OCI identity that can create Functions, Resource Scheduler schedules, logs, dynamic groups, and policies. The identity's OCI SDK/provider config stays outside this repository.
-2. Choose an existing subnet in the deployment region with access to the OCI APIs. Supply its OCID; this stack does not create a VCN.
-3. Build and push the Function image to OCIR in the same region. From the repository root, use a versioned image name matching `function_image`:
+- An OC1 region that supports code-only Functions, an existing subnet with OCI API access, and permissions to create Functions, schedules, logs, an Object Storage bucket, dynamic groups, and policies.
+- Terraform, Python with pip, and OCI CLI **3.94 or newer**, configured for the target tenancy. Credentials stay outside this repository.
+- An approved Terraform state backend for customer use. This stack does not create a VCN.
 
-   ```text
-   docker build --platform linux/amd64 -f function/Dockerfile -t <region-key>.ocir.io/<namespace>/limit-checker:1.0.0 .
-   docker push <region-key>.ocir.io/<namespace>/limit-checker:1.0.0
-   ```
+## Deploy
 
-   The image uses Oracle's Python 3.12 Functions base images. Terraform consumes the pushed image; it does not build it.
-4. Copy `limits.example.tfvars.json` to `limits.auto.tfvars.json` and fill every placeholder. Set `schedule_start_utc` far enough in the future for Terraform apply and IAM propagation. One stack runs in one OCI region; deploy another stack for another region.
-5. Run the local read-only preflight from the repository root: `python -m limit_checker preflight --config terraform/limits.auto.tfvars.json`.
+From the repository root:
 
-Then run `terraform -chdir=terraform init`, `terraform -chdir=terraform plan`, and `terraform -chdir=terraform apply`. Keep Terraform state in an approved backend; state and customer variable files are ignored by Git.
+1. Copy `terraform/limits.example.tfvars.json` to `terraform/limits.auto.tfvars.json`. Replace all placeholders. Set `schedule_start_utc` far enough ahead for deployment and IAM propagation. One stack covers one region.
+2. Run `python -m limit_checker preflight --config terraform/limits.auto.tfvars.json` to validate selected limits against OCI.
+3. Run `terraform -chdir=terraform init` and `terraform -chdir=terraform apply`. The first apply creates the application, invocation log, private archive bucket, and narrowly scoped archive-read policy.
+4. Run `python scripts/deploy_zip.py --config terraform/limits.auto.tfvars.json`. Add `--profile NAME` if needed. The script packages Linux x86 Python dependencies, uploads a versioned ZIP to the bucket, creates or updates the code-only Function, and writes its OCID to the ignored `terraform/function.auto.tfvars.json` file. Rerunning updates the same Function.
+5. Run `terraform -chdir=terraform apply` again. This creates the reader IAM and scheduled invocation for that Function.
+
+On later code or configuration changes, rerun steps 2, 4, and 5. Allow for IAM propagation before the first scheduled run. Keep both auto-tfvars files and Terraform state private and out of Git.
 
 ## Verify A3
 
-Check Terraform's `function_id`, `schedule_id`, and `invocation_log_id` outputs. After the first scheduled run, inspect the invocation log for one `OK` or `WARNING` result per configured monitor. A monitor `ERROR` means the Function invocation fails so the issue is visible in logs. Confirm the usage is for the intended tenancy, region, and availability domain. If that live result does not match the service-limit scope, adjust the checker before adding email alarms.
+Check the `function_id`, `schedule_id`, and `invocation_log_id` Terraform outputs. After the first scheduled run, inspect invocation logs for one `OK` or `WARNING` result per monitor and confirm tenancy, region, and availability-domain scope. A monitor `ERROR` causes the invocation to fail visibly in logs. Do not mark A3 complete until a live scheduled run succeeds.
 
-OCI Function configuration has a small size limit; this stack checks for a roughly 3.5 KB ceiling. A larger monitor set will need an external configuration store in a later phase. The schedule uses UTC and has a one-hour minimum interval.
+The OCI Python SDK makes the archive too large for 25 MB direct upload, so the script uses Object Storage's 250 MB archive limit. Function configuration is limited to 4 KB; a larger monitor set will need external configuration in a later phase. The schedule uses UTC and has a one-hour minimum interval.
 
-Reference: [OCI Functions Terraform resource](https://registry.terraform.io/providers/oracle/oci/latest/docs/resources/functions_function), [Resource Scheduler for Functions](https://docs.oracle.com/en-us/iaas/Content/Functions/Tasks/functionsschedulingfunctions-about.htm), [Function logging source](https://docs.oracle.com/en-us/iaas/Content/Logging/Task/functions_eg.htm), and [OCI Functions base image change](https://docs.oracle.com/en-us/iaas/Content/servicechanges.htm).
+References: [Python ZIP layout](https://docs.oracle.com/en-us/iaas/Content/Functions/Tasks/functions-codeonly-python.htm), [creating code-only Functions](https://docs.oracle.com/en-us/iaas/Content/Functions/Tasks/functions-codeonly-creating.htm), [supported runtimes](https://docs.oracle.com/en-us/iaas/Content/Functions/Tasks/languagessupportedbyfunctions.htm), [Resource Scheduler](https://docs.oracle.com/en-us/iaas/Content/Functions/Tasks/functionsschedulingfunctions-about.htm).
