@@ -1,50 +1,72 @@
-# OCI proactive limit and Cloud Guard alerts
+# OCI proactive alerts project plan
 
-## Goal
+## Goal and order
 
-Alert before selected OCI limits block work, and email selected Cloud Guard findings. Start with compute, storage, and IAM policy limits. Keep this alerting project separate from the existing limit increase and region-copy workflow; reuse its discovery code only if useful.
+Build two independent alerting workstreams:
 
-Mark a phase complete only after its completion criteria are verified. Record the result in this file. Do not mark a phase complete merely because code was written.
+1. **Limit warnings first:** Email when selected OCI resource usage crosses a configurable warning threshold below the hard limit. The warning threshold does not change the OCI limit.
+2. **Cloud Guard later:** Email selected security findings detected by Cloud Guard. This workstream does not depend on the limit checker.
 
-## Phases
+The workstreams may share an OCI Notifications topic and recipients. Keep them separate from the existing limit increase and region-copy project; reuse discovery code only if useful.
 
-### [ ] 1. Scope and feasibility
+Mark a phase complete only after its completion criteria are verified. Record the evidence and date in the progress log. Do not mark a phase complete merely because code was written.
 
-- Confirm the exact compute, storage, and IAM policy limits, their scopes (tenancy, region, availability domain, or compartment), and the first regions and compartments to cover.
-- Check which selected limits expose used and available values through OCI Service Limits, and define a separate counting method where they do not.
-- Confirm the threshold, check frequency, email recipients, OCI access, and Cloud Guard reporting region and finding filters.
+## Limit warnings
 
-**Done when:** A support matrix and agreed MVP configuration are recorded here, including unsupported limits and required access.
+### [ ] 1. Define and validate initial limits
 
-### [ ] 2. Limit-alert MVP
+- Confirm the exact first compute and storage limits, their scopes (tenancy, region, availability domain, or compartment), and the regions and compartments to monitor.
+- Verify how to obtain used and available values for each limit; record unsupported limits and alternatives.
+- Agree on configurable thresholds, check frequency, email recipients, and OCI read access.
+- Decide whether the MVP sends directly through Notifications or publishes custom metrics for Monitoring alarms. The current architecture draft uses custom metrics and alarms.
 
-- Build a configurable, scheduled OCI check for the supported initial compute and storage limits.
-- Calculate usage against each limit's effective scope; send threshold emails through OCI Notifications.
-- Prevent repeat emails while a limit remains above the threshold, and report check failures.
+**Done when:** A support matrix, alert design choice, and agreed MVP configuration are recorded here.
 
-**Done when:** Tests cover threshold crossing, recovery, unsupported limits, and failed API calls; a live test delivers an email for a selected limit.
+### [ ] 2. Build and test the limit-warning MVP
 
-### [ ] 3. Cloud Guard email alerts
+- Implement a scheduled Python OCI Function that checks the selected limits and calculates usage against the correct scope.
+- Send threshold emails through the chosen OCI alert path; include the limit identity, scope, usage, threshold, and region in alerts where supported.
+- Test threshold crossing, recovery, missing usage data, API failures, and a failed or missed check.
+
+**Done when:** Tests pass and a live check for at least one selected limit delivers the expected email without repeated unwanted alerts.
+
+### [ ] 3. Extend and operate limit warnings
+
+- Add the agreed IAM policy count or statement limit using a validated counting method.
+- Add approved limits, regions, and compartments; automate deployment and document configuration and recovery.
+- Monitor checker failures and verify that alert thresholds can be changed safely.
+
+**Done when:** The agreed policy limit and expanded cases are tested, deployment is repeatable, and the customer accepts the limit-warning behavior.
+
+## Cloud Guard findings (after limit warnings)
+
+### [ ] 4. Define Cloud Guard alert scope
+
+- Confirm that Cloud Guard is enabled, its reporting region and targets, which findings or risk levels matter, and the email recipients.
+- Decide whether to reuse the limit-warning Notifications topic or use a separate topic.
+
+**Done when:** The customer agrees on the findings to email and the OCI configuration required.
+
+### [ ] 5. Configure and test Cloud Guard email
 
 - Configure the Cloud Event responder, Events rule, and Notifications email subscription in the Cloud Guard reporting region.
-- Filter findings according to the agreed scope and risk levels.
+- Test with a new finding and verify that selected findings arrive while excluded findings do not.
 
-**Done when:** A new test finding produces the expected email and unwanted findings are filtered out.
-
-### [ ] 4. IAM policy limits and rollout
-
-- Add monitoring for the agreed IAM policy count or statement limits using the validated method from phase 1.
-- Add more limits and regions, deployment automation, operating instructions, and failure monitoring.
-
-**Done when:** The agreed policy limit and expanded cases are tested, deployment can be repeated, and the customer accepts the alert behavior.
+**Done when:** The email test and filtering test pass, and operating instructions are documented.
 
 ## Open decisions
 
+### Limit warnings
+
 - Exact first compute and storage limit names and scopes.
 - Which IAM policy ceiling matters: policy objects, statements per policy, or statements per compartment hierarchy.
-- Thresholds, cadence, recipients, regions, compartments, and Cloud Guard finding filters.
-- Customer tenancy access and who will perform live validation.
+- Thresholds, check frequency, recipients, regions, compartments, and customer tenancy access.
+- Direct Notifications or custom metrics plus Monitoring alarms for the MVP.
+
+### Cloud Guard (decide later)
+
+- Reporting region, targets, finding filters, and recipients.
 
 ## Progress log
 
-- 2026-10-06: Plan created; no phase completed yet.
+- 2026-10-06: Plan reordered into limit warnings first and Cloud Guard findings later; no phase completed yet.
