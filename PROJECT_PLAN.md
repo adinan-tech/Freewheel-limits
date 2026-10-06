@@ -9,6 +9,8 @@ Build two independent alerting workstreams:
 
 The workstreams may share an OCI Notifications topic and recipients. Keep them separate from the existing limit increase and region-copy project; reuse discovery code only if useful.
 
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the proposed limit-warning flow. Confirm it during phase 1.
+
 Mark a phase complete only after its completion criteria are verified. Record the evidence and date in the progress log. Do not mark a phase complete merely because code was written.
 
 ## Limit warnings
