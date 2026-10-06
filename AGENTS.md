@@ -1,7 +1,10 @@
-# Automation guidelines
+# Automation and repository guidelines
 
 - Keep answers short and direct.
 - Do not create, edit, rename, or delete files unless the user explicitly asks.
+- At the start of each requested task, check the working tree, fetch `origin`, and compare local `main` with `origin/main` before editing.
+- If local changes or branch differences exist, inspect them before proceeding; do not overwrite or commit unrelated work.
+- At the end of each task that changes files, commit only the requested changes, push to `origin/main`, and verify that local and remote `main` match. Report any failed sync.
 - Confirm the intended scope and inspect the current state before changing an automation.
 - Make operations idempotent so reruns do not duplicate work or corrupt state.
 - Validate inputs and fail clearly when required values are missing or invalid.
