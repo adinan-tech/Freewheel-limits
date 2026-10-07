@@ -1,109 +1,123 @@
-# OCI service-limit warnings
+# OCI limit warnings
 
-This package deploys a scheduled OCI Function that checks selected service
-limits and sends email when usage reaches a configurable warning percentage.
-It does not change OCI hard limits.
+## 1. Prerequisites
 
-## Prerequisites
-
-- Python 3.10 or later
-- Terraform 1.3 or later
-- OCI CLI 3.94 or later, configured with a profile that can create Functions,
-  Logging, Resource Scheduler, Monitoring, Notifications, IAM policies and
-  dynamic groups in the target tenancy
+- Python 3.10+
+- Terraform 1.3+
+- OCI CLI 3.94+ configured with the target OCI profile
 - An existing subnet with outbound access to OCI APIs
-- An approved Terraform state backend for production use
+- OCI permissions to create Functions, Logging, Resource Scheduler,
+  Monitoring alarms, Notifications, Dynamic Groups and IAM policies
 
-Install the Python dependency from the repository root:
+Install the Python dependency:
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-## Configure
+## 2. Create the customer configuration
 
-Copy the example file and edit the copy. This is the only configuration file
-that the customer needs to edit.
+Copy the example file. Edit only the copied file.
 
 ```bash
 cp terraform/limits.example.tfvars.json terraform/limits.auto.tfvars.json
 ```
 
-On Windows PowerShell:
+Windows PowerShell:
 
 ```powershell
 Copy-Item terraform/limits.example.tfvars.json terraform/limits.auto.tfvars.json
 ```
 
-In `terraform/limits.auto.tfvars.json`, replace every value marked `CHANGE
-HERE`. The remaining values are usable defaults and may also be changed:
+Open `terraform/limits.auto.tfvars.json` and replace every value marked
+`CHANGE HERE`:
 
-- `archive_bucket_name`: leave `null` to create a private archive bucket, or
-  set the name of an existing private bucket in the target region. A supplied
-  bucket is never deleted by this stack.
-- `check_schedule_utc`: standard five-field UTC cron expression. OCI Resource
-  Scheduler has a minimum interval of one hour. For example, `15 * * * *`
-  runs once per hour at minute 15.
-- `warning_percent`: soft warning threshold for each monitor. It does not
-  change the OCI hard limit.
-- `monitors`: selected limits, their scopes, and warning thresholds.
+- `region`
+- `home_region`
+- `tenancy_id`
+- `function_compartment_id`
+- `subnet_id`
+- `schedule_start_utc`: future UTC timestamp, for example
+  `2026-12-31T12:00:00Z`
+- `email_recipients`
+- `availability_domain` for every AD-scoped monitor
 
-Set `schedule_start_utc` to a future UTC time that gives enough time for the
-deployment and IAM propagation. Keep `limits.auto.tfvars.json`, Terraform
-state, and OCI credentials private; they are ignored by Git.
+Optional values:
 
-## Validate and deploy
+- `archive_bucket_name`: `null` creates a private bucket. Set an existing
+  private bucket name to reuse it; the supplied bucket is preserved on destroy.
+- `check_schedule_utc`: five-field UTC cron expression. `15 * * * *` runs once
+  per hour at minute 15. OCI Resource Scheduler has a minimum one-hour
+  interval.
+- `warning_percent`: email threshold for each monitor. Default: `80`.
 
-Run the read-only preflight first:
+Keep `terraform/limits.auto.tfvars.json`, Terraform state and OCI credentials
+private. They are ignored by Git.
+
+## 3. Validate the selected limits
 
 ```bash
 python -m limit_checker preflight --config terraform/limits.auto.tfvars.json --profile DEFAULT
 ```
 
-Deploy the complete stack with one command:
+Fix any `ERROR` result before deployment.
+
+## 4. Deploy
 
 ```bash
 python scripts/deploy_stack.py apply --config terraform/limits.auto.tfvars.json --profile DEFAULT
 ```
 
-The script performs the required internal steps: Terraform creates the
-Functions application, logging and archive access; OCI CLI packages and
-deploys the code-only Function; Terraform then creates IAM, the schedule,
-Notifications topic and subscription, and one Monitoring alarm per monitor.
+This command creates the Functions application, Function, log group and
+invocation log, archive policy, two Dynamic Groups, three IAM policies,
+Resource Scheduler schedule, Notifications topic and subscription, and one
+Monitoring alarm per monitor.
 
-Confirm each email subscription message sent by OCI. Alerts cannot be
-delivered until confirmation.
+## 5. Confirm email delivery
 
-## Verify
+OCI sends a confirmation email to every address in `email_recipients`.
+Click **Confirm subscription** in each email. No warning email can arrive
+before confirmation.
 
-After the first scheduled run, open the Function invocation log in OCI Console
-under **Observability & Management > Logging** in the configured region. Each
-monitor should report `OK` or `WARNING`. `WARNING` means that the check ran
-successfully and crossed its configured soft threshold. `ERROR` means the
-monitor could not be checked.
+## 6. Verify
 
-The stack creates a Functions application, log group and invocation log, two
-Dynamic Groups, three IAM policies, a Resource Scheduler schedule, a
-Notifications topic and email subscriptions, and one Monitoring alarm per
-monitor. It also creates a private archive bucket only when
-`archive_bucket_name` is `null`.
+After the first scheduled run, open OCI Console:
 
-The included template defines ten monitors: Compute Standard3, Standard E4,
-Standard E5 and custom images; Block Volume count, total storage and backups;
-Object Storage bucket count; Load Balancer flexible count; and tenancy IAM
-policy count.
+`Observability & Management > Logging > <invocation log>`
 
-## Update or remove
+Each monitor must show `OK` or `WARNING`. `WARNING` means that usage reached
+the configured threshold and its Monitoring alarm can send email. `ERROR`
+means the monitor could not be checked.
 
-After changing code or configuration, rerun preflight and the same `apply`
-command. The deployment script updates the Function and Terraform reconciles
-the managed resources.
+## Monitored limits in the example
 
-To remove the stack:
+| Monitor | OCI limit | Scope |
+| --- | --- | --- |
+| `compute_standard3_cores` | Compute `standard3-core-count` | Availability domain |
+| `compute_standard_e4_cores` | Compute `standard-e4-core-count` | Availability domain |
+| `compute_standard_e5_cores` | Compute `standard-e5-core-count` | Availability domain |
+| `compute_custom_images` | Compute `custom-image-count` | Region |
+| `block_volume_count` | Block Storage `volume-count` | Availability domain |
+| `block_total_storage_gb` | Block Storage `total-storage-gb` | Availability domain |
+| `block_backup_count` | Block Storage `backup-count` | Region |
+| `object_bucket_count` | Object Storage `bucket-count` | Region |
+| `load_balancer_flexible_count` | Load Balancer `lb-flexible-count` | Region |
+| `iam_policies_tenancy` | Identity `policies-count` | Tenancy |
+
+## Update
+
+After changing code or `limits.auto.tfvars.json`, run:
+
+```bash
+python -m limit_checker preflight --config terraform/limits.auto.tfvars.json --profile DEFAULT
+python scripts/deploy_stack.py apply --config terraform/limits.auto.tfvars.json --profile DEFAULT
+```
+
+## Destroy
 
 ```bash
 python scripts/deploy_stack.py destroy --config terraform/limits.auto.tfvars.json --profile DEFAULT
 ```
 
-The script deletes the Function before its application. A supplied archive
-bucket is preserved. Keep the Terraform state until cleanup is complete.
+The Function is deleted before the Functions application. A supplied archive
+bucket is preserved.
