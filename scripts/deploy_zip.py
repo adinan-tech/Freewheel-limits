@@ -1,7 +1,6 @@
 """Package and create/update the code-only OCI Function without Docker or OCIR."""
 
 import argparse
-import hashlib
 import json
 from pathlib import Path
 import re
@@ -19,7 +18,8 @@ from limit_checker.config import load_config  # noqa: E402
 def command(args: list[str]) -> str:
     result = subprocess.run(args, text=True, capture_output=True, check=False)
     if result.returncode:
-        raise RuntimeError(f"command failed: {' '.join(args[:4])}\n{result.stderr.strip()}")
+        detail = result.stderr.strip() or result.stdout.strip()
+        raise RuntimeError(f"command failed: {' '.join(args[:4])}\n{detail}")
     return result.stdout
 
 
@@ -57,10 +57,13 @@ def deploy(config_path: Path, profile: str | None) -> str:
         raise ValueError("name_prefix must be a non-empty name")
     runtime_input = {
         key: inputs[key]
-        for key in ("region", "tenancy_id", "check_schedule_utc", "email_recipients", "monitors")
+        for key in ("region", "home_region", "tenancy_id", "check_schedule_utc", "email_recipients", "monitors")
     }
-    runtime_input["subscription_id"] = inputs.get("subscription_id")
     runtime_config = {"LIMIT_CHECKER_CONFIG": json.dumps(runtime_input, separators=(",", ":"))}
+    metric_compartment_id = inputs.get("function_compartment_id")
+    if not isinstance(metric_compartment_id, str) or not metric_compartment_id.startswith("ocid1.compartment."):
+        raise ValueError("function_compartment_id must be an OCI compartment OCID")
+    runtime_config["METRIC_COMPARTMENT_ID"] = metric_compartment_id
     if sum(len(k.encode()) + len(v.encode()) for k, v in runtime_config.items()) > 4000:
         raise ValueError("Function configuration exceeds the 4 KB OCI limit")
 
@@ -77,7 +80,8 @@ def deploy(config_path: Path, profile: str | None) -> str:
     if profile:
         cli += ["--profile", profile]
     name = f"{prefix}_checker"
-    functions = json.loads(command(cli + ["fn", "function", "list", "--application-id", app_id, "--all"]))["data"]
+    raw_functions = command(cli + ["fn", "function", "list", "--application-id", app_id, "--all"])
+    functions = json.loads(raw_functions)["data"] if raw_functions.strip() else []
     existing = [item for item in functions if item.get("display-name") == name]
     if len(existing) > 1:
         raise RuntimeError(f"more than one Function is named {name}")
@@ -97,15 +101,14 @@ def deploy(config_path: Path, profile: str | None) -> str:
             raise RuntimeError("ZIP exceeds OCI's 250 MB Object Storage archive limit")
         settings = folder / "config.json"
         settings.write_text(json.dumps(runtime_config), encoding="utf-8")
-        digest = hashlib.sha256(archive.read_bytes()).hexdigest()[:16]
-        object_name = f"{name}_{digest}.zip"
+        object_name = f"{name}.zip"
         command(cli + ["os", "object", "put", "--namespace", namespace, "--bucket-name", bucket,
                        "--name", object_name, "--file", str(archive), "--force"])
         common = ["--config", "file://" + settings.as_posix(), "--bucket-name", bucket,
                   "--namespace", namespace, "--object-name", object_name,
                   "--handler", "func.handler", "--memory-in-mbs", "256",
                   "--timeout-in-seconds", "120", "--detached-mode-timeout-in-seconds", "120",
-                  "--wait-for-state", "ACTIVE"]
+                  "--wait-for-state", "SUCCEEDED"]
         if existing:
             function_id = existing[0]["id"]
             command(cli + ["fn", "function", "update", "archive-function", "--function-id", function_id,
@@ -117,9 +120,6 @@ def deploy(config_path: Path, profile: str | None) -> str:
                                         "--functions-runtime-name", "python312.ol9"] + common))
             function_id = created["data"]["id"]
 
-    (ROOT / "terraform" / "function.auto.tfvars.json").write_text(
-        json.dumps({"function_id": function_id}, indent=2) + "\n", encoding="utf-8"
-    )
     return function_id
 
 

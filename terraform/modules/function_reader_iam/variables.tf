@@ -6,8 +6,9 @@ variable "tenancy_id" {
 variable "reader_params" {
   description = "Function reader identities, keyed by a stable name."
   type = map(object({
-    function_id        = string
-    dynamic_group_name = string
-    policy_name        = string
+    function_id           = string
+    dynamic_group_name    = string
+    policy_name           = string
+    metric_compartment_id = string
   }))
 }

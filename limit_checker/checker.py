@@ -35,6 +35,7 @@ class LimitsGateway(Protocol):
     def definitions(self, config: Config, monitor: Monitor) -> list[Definition]: ...
     def values(self, config: Config, monitor: Monitor, scope_type: str) -> list[LimitValue]: ...
     def availability(self, config: Config, monitor: Monitor) -> Availability: ...
+    def policy_count(self, config: Config) -> int: ...
 
 
 @dataclass(frozen=True)
@@ -82,7 +83,8 @@ def evaluate(config: Config, monitor: Monitor, gateway: LimitsGateway) -> Result
             raise CheckError("availability_domain is required for this AD-scoped limit")
         if scope != "AD" and monitor.availability_domain:
             raise CheckError("availability_domain must be omitted for this limit scope")
-        if not definition.availability_supported:
+        is_iam_policy_count = monitor.service_name == "identity" and monitor.limit_name == "policies-count"
+        if not is_iam_policy_count and not definition.availability_supported:
             raise CheckError("OCI does not support resource availability for this limit")
 
         values = [
@@ -97,11 +99,17 @@ def evaluate(config: Config, monitor: Monitor, gateway: LimitsGateway) -> Result
         if hard_limit is None or hard_limit <= 0:
             raise CheckError("current hard limit is missing or not positive")
 
-        availability = gateway.availability(config, monitor)
-        if availability.used is None or availability.available is None:
-            raise CheckError("OCI did not return both used and available values")
-        if availability.used < 0 or availability.available < 0:
-            raise CheckError("OCI returned a negative usage or availability value")
+        if is_iam_policy_count:
+            used = gateway.policy_count(config)
+            if used < 0:
+                raise CheckError("OCI returned a negative policy count")
+            availability = Availability(used, max(hard_limit - used, 0))
+        else:
+            availability = gateway.availability(config, monitor)
+            if availability.used is None or availability.available is None:
+                raise CheckError("OCI did not return both used and available values")
+            if availability.used < 0 or availability.available < 0:
+                raise CheckError("OCI returned a negative usage or availability value")
         usage_percent = availability.used / hard_limit * 100
         status = "WARNING" if usage_percent >= monitor.warning_percent else "OK"
         return Result(

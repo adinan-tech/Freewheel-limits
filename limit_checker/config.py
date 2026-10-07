@@ -22,8 +22,8 @@ class Monitor:
 @dataclass(frozen=True)
 class Config:
     region: str
+    home_region: str
     tenancy_id: str
-    subscription_id: str | None
     check_schedule_utc: str
     email_recipients: tuple[str, ...]
     monitors: tuple[Monitor, ...]
@@ -40,14 +40,11 @@ def parse_config(data: object) -> Config:
         raise ConfigError("configuration must be a JSON object")
 
     region = _text(data.get("region"), "region")
+    home_region = _text(data.get("home_region"), "home_region")
     tenancy_id = _text(data.get("tenancy_id"), "tenancy_id")
     if not tenancy_id.startswith("ocid1.tenancy."):
         raise ConfigError("tenancy_id must be an OCI tenancy OCID")
 
-    raw_subscription = data.get("subscription_id")
-    subscription_id = (
-        None if raw_subscription is None else _text(raw_subscription, "subscription_id")
-    )
     schedule = _text(data.get("check_schedule_utc"), "check_schedule_utc")
     if len(schedule.split()) != 5:
         raise ConfigError("check_schedule_utc must be a five-field UTC cron expression")
@@ -69,9 +66,11 @@ def parse_config(data: object) -> Config:
         if not isinstance(item, dict):
             raise ConfigError(f"monitors.{name} must be an object")
         threshold = item.get("warning_percent")
-        if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not 0 < threshold < 100:
-            raise ConfigError(f"monitors.{name}.warning_percent must be between 0 and 100")
+        if isinstance(threshold, bool) or not isinstance(threshold, (int, float)) or not 0 <= threshold < 100:
+            raise ConfigError(f"monitors.{name}.warning_percent must be between 0 (inclusive) and 100")
         ad = item.get("availability_domain")
+        if item.get("service_name") == "identity" and item.get("limit_name") == "policies-count" and ad is not None:
+            raise ConfigError(f"monitors.{name}.identity/policies-count must have no availability_domain")
         monitors.append(
             Monitor(
                 name=name,
@@ -81,7 +80,7 @@ def parse_config(data: object) -> Config:
                 warning_percent=float(threshold),
             )
         )
-    return Config(region, tenancy_id, subscription_id, schedule, emails, tuple(monitors))
+    return Config(region, home_region, tenancy_id, schedule, emails, tuple(monitors))
 
 
 def load_config(path: str | Path) -> Config:

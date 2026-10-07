@@ -5,12 +5,13 @@ from .config import Config, Monitor
 
 
 class OciLimitsGateway:
-    def __init__(self, client, oci_module):
+    def __init__(self, client, oci_module, identity_client=None):
         self.client = client
         self.oci = oci_module
+        self.identity_client = identity_client
 
     @classmethod
-    def create(cls, region: str, auth: str, config_file: str | None, profile: str):
+    def create(cls, region: str, auth: str, config_file: str | None, profile: str, home_region: str | None = None):
         try:
             import oci
         except ImportError as exc:
@@ -24,6 +25,7 @@ class OciLimitsGateway:
             if auth == "resource-principal":
                 signer = oci.auth.signers.get_resource_principals_signer()
                 client = oci.limits.LimitsClient({"region": region}, signer=signer, **options)
+                identity_client = oci.identity.IdentityClient({"region": home_region or region}, signer=signer, **options)
             else:
                 if config_file:
                     credentials = oci.config.from_file(file_location=config_file, profile_name=profile)
@@ -32,9 +34,12 @@ class OciLimitsGateway:
                 credentials["region"] = region
                 oci.config.validate_config(credentials)
                 client = oci.limits.LimitsClient(credentials, **options)
+                identity_credentials = dict(credentials)
+                identity_credentials["region"] = home_region or region
+                identity_client = oci.identity.IdentityClient(identity_credentials, **options)
         except (oci.exceptions.ClientError, OSError, ValueError) as exc:
             raise CheckError(f"cannot initialize OCI access: {type(exc).__name__}") from exc
-        return cls(client, oci)
+        return cls(client, oci, identity_client)
 
     def _list(self, method, *args, **kwargs):
         try:
@@ -46,8 +51,6 @@ class OciLimitsGateway:
 
     def definitions(self, config: Config, monitor: Monitor) -> list[Definition]:
         args = {"service_name": monitor.service_name, "name": monitor.limit_name}
-        if config.subscription_id:
-            args["subscription_id"] = config.subscription_id
         items = self._list(self.client.list_limit_definitions, config.tenancy_id, **args)
         return [
             Definition(item.name, item.scope_type, item.is_resource_availability_supported)
@@ -58,8 +61,6 @@ class OciLimitsGateway:
         args = {"name": monitor.limit_name, "scope_type": scope_type}
         if monitor.availability_domain:
             args["availability_domain"] = monitor.availability_domain
-        if config.subscription_id:
-            args["subscription_id"] = config.subscription_id
         items = self._list(
             self.client.list_limit_values,
             config.tenancy_id,
@@ -75,8 +76,6 @@ class OciLimitsGateway:
         args = {}
         if monitor.availability_domain:
             args["availability_domain"] = monitor.availability_domain
-        if config.subscription_id:
-            args["subscription_id"] = config.subscription_id
         try:
             response = self.client.get_resource_availability(
                 monitor.service_name,
@@ -91,3 +90,18 @@ class OciLimitsGateway:
         data = response.data
         used = data.fractional_usage if data.fractional_usage is not None else data.used
         return Availability(used, data.available)
+
+    def policy_count(self, config: Config) -> int:
+        if self.identity_client is None:
+            raise CheckError("OCI Identity client is not configured")
+        try:
+            compartments = self._list(
+                self.identity_client.list_compartments,
+                config.tenancy_id,
+                compartment_id_in_subtree=True,
+                lifecycle_state="ACTIVE",
+            )
+            compartment_ids = [config.tenancy_id, *(item.id for item in compartments)]
+            return sum(len(self._list(self.identity_client.list_policies, compartment_id)) for compartment_id in compartment_ids)
+        except CheckError:
+            raise

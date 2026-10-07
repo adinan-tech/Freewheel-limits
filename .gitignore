@@ -1,4 +1,6 @@
 .terraform/
+terraform/.tmp-tfdata-*/
+terraform/*.tfplan
 *.tfstate
 *.tfstate.*
 terraform/*.tfvars

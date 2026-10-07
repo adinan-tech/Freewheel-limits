@@ -13,41 +13,34 @@ variable "tenancy_id" {
   type        = string
 }
 
-variable "subscription_id" {
-  description = "Optional OCI subscription OCID when limit values vary by subscription."
-  type        = string
-  default     = null
-}
-
 variable "function_compartment_id" {
   description = "Compartment OCID for the Function application and invocation logs."
   type        = string
 }
 
-variable "schedule_compartment_id" {
-  description = "Compartment OCID for the Resource Scheduler schedule; defaults to the Function compartment."
+variable "archive_bucket_name" {
+  description = "Existing private Object Storage bucket name in this tenancy and region; null creates a dedicated bucket."
   type        = string
   default     = null
-}
-
-variable "subnet_ids" {
-  description = "Existing subnets with access to OCI APIs."
-  type        = list(string)
 
   validation {
-    condition     = length(var.subnet_ids) > 0
-    error_message = "Provide at least one existing subnet OCID."
+    condition     = var.archive_bucket_name == null ? true : length(trimspace(var.archive_bucket_name)) > 0
+    error_message = "archive_bucket_name must be null or a non-empty bucket name."
   }
 }
 
-variable "network_security_group_ids" {
-  description = "Optional network security group OCIDs for the Function application."
-  type        = list(string)
-  default     = []
+variable "subnet_id" {
+  description = "Existing subnet OCID with access to OCI APIs."
+  type        = string
+
+  validation {
+    condition     = startswith(var.subnet_id, "ocid1.subnet.")
+    error_message = "Provide one existing subnet OCID."
+  }
 }
 
 variable "function_id" {
-  description = "Code-only Function OCID written by the ZIP deployment step; null on first apply."
+  description = "Internal deploy_stack.py value for the code-only Function OCID; customers do not set it."
   type        = string
   default     = null
 
@@ -83,10 +76,11 @@ variable "monitors" {
 
   validation {
     condition = length(var.monitors) > 0 && alltrue([
-      for monitor in values(var.monitors) : monitor.warning_percent > 0 && monitor.warning_percent < 100
+      for monitor in values(var.monitors) : monitor.warning_percent >= 0 && monitor.warning_percent < 100
     ])
-    error_message = "Provide at least one monitor with warning_percent between 0 and 100."
+    error_message = "Provide at least one monitor with warning_percent between 0 (inclusive) and 100."
   }
+
 }
 
 variable "name_prefix" {

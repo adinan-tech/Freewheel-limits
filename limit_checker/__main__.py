@@ -20,7 +20,7 @@ def main(argv=None) -> int:
 
     try:
         config = load_config(args.config)
-        gateway = OciLimitsGateway.create(config.region, args.auth, args.oci_config, args.profile)
+        gateway = OciLimitsGateway.create(config.region, args.auth, args.oci_config, args.profile, config.home_region)
         results = check_all(config, gateway)
     except (ConfigError, CheckError, OSError, ValueError) as exc:
         print(json.dumps({"status": "ERROR", "error": str(exc)}), file=sys.stderr)

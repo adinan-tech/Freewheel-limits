@@ -4,8 +4,18 @@ output "application_id" {
 }
 
 output "archive_bucket_name" {
-  description = "Dedicated private Object Storage bucket for the Function ZIP."
-  value       = oci_objectstorage_bucket.archive.name
+  description = "Selected private Object Storage bucket for the Function ZIP."
+  value       = local.archive_bucket_name
+}
+
+output "archive_bucket_compartment_id" {
+  description = "Compartment containing the selected archive bucket."
+  value       = local.archive_bucket_compartment_id
+}
+
+output "archive_bucket_managed" {
+  description = "Whether Terraform creates and manages the archive bucket."
+  value       = var.archive_bucket_name == null
 }
 
 output "archive_namespace" {
@@ -26,4 +36,9 @@ output "schedule_id" {
 output "invocation_log_id" {
   description = "OCID of the Function invocation log."
   value       = module.function_logging.log_ids["checker"]
+}
+
+output "notification_topic_id" {
+  description = "OCID of the Notifications topic for limit warnings."
+  value       = var.function_id == null ? null : oci_ons_notification_topic.limit_warnings[0].topic_id
 }

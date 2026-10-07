@@ -5,14 +5,14 @@ import json
 from limit_checker.checker import Availability, CheckError, Definition, LimitValue, check_all
 from limit_checker.config import ConfigError, parse_config
 from limit_checker.oci_gateway import OciLimitsGateway
-from function.func import run_check
+from function.func import publish_metrics, run_check
 
 
 def sample_config(**changes):
     data = {
         "region": "eu-frankfurt-1",
+        "home_region": "us-ashburn-1",
         "tenancy_id": "ocid1.tenancy.oc1..example",
-        "subscription_id": None,
         "check_schedule_utc": "0 * * * *",
         "email_recipients": ["ops@example.com"],
         "monitors": {
@@ -51,11 +51,27 @@ class FakeGateway:
 
 
 class CheckerTests(unittest.TestCase):
+    def test_function_publishes_usage_metric_for_each_available_result(self):
+        class Client:
+            def post_metric_data(self, details):
+                self.details = details
+
+        client = Client()
+        publish_metrics([
+            {"monitor": "block_volume_count", "usage_percent": 0.074},
+            {"monitor": "failed_check", "usage_percent": None},
+        ], "eu-frankfurt-1", "ocid1.compartment.oc1..example", client)
+        metric = client.details.metric_data[0]
+        self.assertEqual(metric.namespace, "limit_warnings")
+        self.assertEqual(metric.name, "LimitUsagePercent")
+        self.assertEqual(metric.dimensions, {"monitor": "block_volume_count"})
+        self.assertEqual(metric.datapoints[0].value, 0.074)
+
     def test_function_entrypoint_uses_same_configuration(self):
         config_json = json.dumps({
             "region": "eu-frankfurt-1",
+            "home_region": "us-ashburn-1",
             "tenancy_id": "ocid1.tenancy.oc1..example",
-            "subscription_id": None,
             "check_schedule_utc": "0 * * * *",
             "email_recipients": ["ops@example.com"],
             "monitors": {
@@ -121,6 +137,25 @@ class CheckerTests(unittest.TestCase):
         self.assertEqual(result.status, "WARNING")
         self.assertEqual(result.scope_type, "REGION")
 
+    def test_iam_policy_count_is_inferred_from_the_selected_limit(self):
+        config = sample_config(monitors={
+            "iam_policies_tenancy": {
+                "service_name": "identity",
+                "limit_name": "policies-count",
+                "availability_domain": None,
+                "warning_percent": 80,
+            }
+        })
+
+        class PolicyGateway(FakeGateway):
+            def policy_count(self, config):
+                return 80
+
+        result = check_all(config, PolicyGateway(scope="GLOBAL", supported=False, hard=100))[0]
+        self.assertEqual(result.status, "WARNING")
+        self.assertEqual(result.used, 80)
+        self.assertEqual(result.available, 20)
+
     def test_invalid_customer_input_is_rejected(self):
         with self.assertRaisesRegex(ConfigError, "placeholder"):
             sample_config(region="<oci-region>")
@@ -134,6 +169,16 @@ class CheckerTests(unittest.TestCase):
         }
         with self.assertRaisesRegex(ConfigError, "warning_percent"):
             sample_config(monitors=bad)
+
+        zero_threshold = sample_config(monitors={
+            "zero_usage_test": {
+                "service_name": "compute",
+                "limit_name": "standard3-core-count",
+                "availability_domain": "eu-frankfurt-1-AD-1",
+                "warning_percent": 0,
+            }
+        })
+        self.assertEqual(check_all(zero_threshold, FakeGateway(used=0, available=100))[0].status, "WARNING")
 
 
 class AdapterTests(unittest.TestCase):
