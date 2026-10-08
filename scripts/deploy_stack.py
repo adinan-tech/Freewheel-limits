@@ -46,7 +46,8 @@ def deployed_function_id(settings: dict[str, object], profile: str | None) -> st
     cli = ["oci", "--region", str(settings["region"])]
     if profile:
         cli += ["--profile", profile]
-    functions = json.loads(command(cli + ["fn", "function", "list", "--application-id", app_id, "--all"]))["data"]
+    raw_functions = command(cli + ["fn", "function", "list", "--application-id", app_id, "--all"])
+    functions = json.loads(raw_functions)["data"] if raw_functions.strip() else []
     matches = [item.get("id") for item in functions if item.get("display-name") == f"{prefix}_checker"]
     if len(matches) > 1:
         raise RuntimeError(f"more than one Function is named {prefix}_checker")

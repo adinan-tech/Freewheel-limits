@@ -1,32 +1,86 @@
 # OCI limit warnings
 
-## 1. Prerequisites
+## 1. Install prerequisites on the deployment machine
 
-- Python 3.10+
-- Terraform 1.3+
-- OCI CLI 3.94+ configured with the target OCI profile
-- An existing subnet with outbound access to OCI APIs
-- OCI permissions to create Functions, Logging, Resource Scheduler,
-  Monitoring alarms, Notifications, Dynamic Groups and IAM policies
+Install these tools using the package manager or installer for the operating
+system:
 
-Install the Python dependency:
+- Git
+- Python 3.10 or later, including `pip` and `venv`
+- Terraform 1.3 or later
+- OCI CLI 3.94 or later
+- An OCI CLI profile for an OCI user allowed to create Functions, Logging,
+  Resource Scheduler, Monitoring alarms, Notifications, Dynamic Groups and IAM
+  policies
+
+Verify the tools:
 
 ```bash
+git --version
+python3 --version
+oci --version
+terraform version
+```
+
+The deployment machine needs outbound HTTPS access to GitHub, PyPI, HashiCorp
+and OCI APIs. The Function subnet configured later also needs outbound access
+to OCI APIs.
+
+## 2. Clone the repository
+
+```bash
+git clone https://github.com/adinan-tech/Freewheel-limits.git
+cd Freewheel-limits
+```
+
+For a private repository, use a GitHub Personal Access Token as the password
+when Git prompts for it.
+
+## 3. Install the project Python dependency
+
+Choose the installed Python 3.10+ executable and verify its version before
+creating the virtual environment. On Oracle Linux 9, use `python3.11` because
+the default `python3` command can still refer to Python 3.9.
+
+Linux or macOS:
+
+```bash
+PYTHON_BIN=python3.11
+$PYTHON_BIN --version
+$PYTHON_BIN -m venv .venv
+source .venv/bin/activate
+python --version
 python -m pip install -r requirements.txt
 ```
 
-## 2. Create the customer configuration
+Replace `python3.11` with the command for the installed Python 3.10+ version
+on another operating system.
+
+Keep this virtual environment active while running the remaining commands.
+
+## 4. Configure OCI CLI
+
+Run:
+
+```bash
+oci setup config
+```
+
+Use the target tenancy, region and an OCI user that has permission to create
+Functions, Logging, Resource Scheduler, Monitoring alarms, Notifications,
+Dynamic Groups and IAM policies. Upload the generated public API key to that
+OCI user, then verify the `DEFAULT` profile:
+
+```bash
+oci iam availability-domain list --profile DEFAULT
+```
+
+## 5. Create the customer configuration
 
 Copy the example file. Edit only the copied file.
 
 ```bash
 cp terraform/limits.example.tfvars.json terraform/limits.auto.tfvars.json
-```
-
-Windows PowerShell:
-
-```powershell
-Copy-Item terraform/limits.example.tfvars.json terraform/limits.auto.tfvars.json
 ```
 
 Open `terraform/limits.auto.tfvars.json` and replace every value marked
@@ -54,7 +108,7 @@ Optional values:
 Keep `terraform/limits.auto.tfvars.json`, Terraform state and OCI credentials
 private. They are ignored by Git.
 
-## 3. Validate the selected limits
+## 6. Validate the selected limits
 
 ```bash
 python -m limit_checker preflight --config terraform/limits.auto.tfvars.json --profile DEFAULT
@@ -62,7 +116,7 @@ python -m limit_checker preflight --config terraform/limits.auto.tfvars.json --p
 
 Fix any `ERROR` result before deployment.
 
-## 4. Deploy
+## 7. Deploy
 
 ```bash
 python scripts/deploy_stack.py apply --config terraform/limits.auto.tfvars.json --profile DEFAULT
@@ -73,13 +127,13 @@ invocation log, archive policy, two Dynamic Groups, three IAM policies,
 Resource Scheduler schedule, Notifications topic and subscription, and one
 Monitoring alarm per monitor.
 
-## 5. Confirm email delivery
+## 8. Confirm email delivery
 
 OCI sends a confirmation email to every address in `email_recipients`.
 Click **Confirm subscription** in each email. No warning email can arrive
 before confirmation.
 
-## 6. Verify
+## 9. Verify
 
 After the first scheduled run, open OCI Console:
 
