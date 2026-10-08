@@ -1,8 +1,0 @@
-.git
-.terraform
-*.tfstate*
-*.tfvars
-*.tfvars.json
-tests
-__pycache__
-*.pyc
