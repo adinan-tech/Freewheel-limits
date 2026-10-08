@@ -115,6 +115,17 @@ Optional values:
   interval.
 - `warning_percent`: email threshold for each monitor. Default: `80`.
 
+To print the current UTC time and a timestamp 15 minutes in the future before
+editing `schedule_start_utc` (works on Linux and macOS while the virtual
+environment is active):
+
+```bash
+python -c "from datetime import datetime,timezone,timedelta; f='%Y-%m-%dT%H:%M:%SZ'; n=datetime.now(timezone.utc); print('now:   '+n.strftime(f)); print('start: '+(n+timedelta(minutes=15)).strftime(f))"
+```
+
+Use the printed `start` value for `schedule_start_utc`. The start time must be
+in the future when `apply` runs.
+
 Keep `terraform/limits.auto.tfvars.json`, Terraform state and OCI credentials
 private. They are ignored by Git.
 
@@ -185,9 +196,31 @@ python scripts/deploy_stack.py apply --config terraform/limits.auto.tfvars.json 
 
 ## Destroy
 
+Run this from the repository root with the same configuration and OCI profile
+used for deployment:
+
 ```bash
+cd ~/Freewheel-limits
+source .venv/bin/activate
 python scripts/deploy_stack.py destroy --config terraform/limits.auto.tfvars.json --profile DEFAULT
 ```
+
+The command removes the Function, application, IAM policies and dynamic
+groups, schedule, alarms, topic, subscription and logs created by this
+project. It is safe to rerun if the first attempt is interrupted.
+
+Verify that Terraform has no remaining managed resources:
+
+```bash
+terraform -chdir=terraform state list
+```
+
+An empty result means the deployment resources are destroyed. The existing
+archive bucket is preserved when `archive_bucket_managed` is `false`.
+
+If you want to remove a bucket created by this project, set
+`archive_bucket_managed` to `true` before deployment; never use that setting
+for a customer-owned bucket.
 
 The Function is deleted before the Functions application. A supplied archive
 bucket is preserved.
