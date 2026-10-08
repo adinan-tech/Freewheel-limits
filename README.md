@@ -22,6 +22,9 @@ oci --version
 terraform version
 ```
 
+The Python version must be 3.10 or later. On systems where `python3` is
+older, verify the versioned executable that will be used in section 3.
+
 The deployment machine needs outbound HTTPS access to GitHub, PyPI, HashiCorp
 and OCI APIs. The Function subnet configured later also needs outbound access
 to OCI APIs.
@@ -31,6 +34,13 @@ to OCI APIs.
 ```bash
 git clone https://github.com/adinan-tech/Freewheel-limits.git
 cd Freewheel-limits
+```
+
+If the repository is already present, do not clone it again:
+
+```bash
+cd ~/Freewheel-limits
+git pull
 ```
 
 For a private repository, use a GitHub Personal Access Token as the password
@@ -127,6 +137,9 @@ invocation log, archive policy, two Dynamic Groups, three IAM policies,
 Resource Scheduler schedule, Notifications topic and subscription, and one
 Monitoring alarm per monitor.
 
+On a new stack, the script waits for the archive-read IAM policy to propagate
+before creating the Function. This can take up to 90 seconds.
+
 ## 8. Confirm email delivery
 
 OCI sends a confirmation email to every address in `email_recipients`.
@@ -142,6 +155,9 @@ After the first scheduled run, open OCI Console:
 Each monitor must show `OK` or `WARNING`. `WARNING` means that usage reached
 the configured threshold and its Monitoring alarm can send email. `ERROR`
 means the monitor could not be checked.
+
+Also verify that the Function is `ACTIVE`, the Resource Scheduler schedule is
+`ACTIVE`, and each email subscription is `ACTIVE` after its confirmation.
 
 ## Monitored limits in the example
 

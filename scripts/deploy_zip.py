@@ -6,6 +6,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import time
 from tempfile import TemporaryDirectory
 from zipfile import ZIP_DEFLATED, ZipFile, ZipInfo
 
@@ -21,6 +22,22 @@ def command(args: list[str]) -> str:
         detail = result.stderr.strip() or result.stdout.strip()
         raise RuntimeError(f"command failed: {' '.join(args[:4])}\n{detail}")
     return result.stdout
+
+
+def update_function_with_retry(cli: list[str], function_id: str, common: list[str]) -> str:
+    """Retry an update while OCI finishes a previous Function operation."""
+    delays = (0, 5, 10, 20, 40)
+    args = cli + ["fn", "function", "update", "archive-function", "--function-id", function_id, "--force"] + common
+    for attempt, delay in enumerate(delays):
+        if delay:
+            print(f"Function is busy; retrying in {delay}s...", flush=True)
+            time.sleep(delay)
+        try:
+            return command(args)
+        except RuntimeError as error:
+            if "currently being modified" not in str(error) or attempt == len(delays) - 1:
+                raise
+    raise RuntimeError("Function update retry loop ended unexpectedly")
 
 
 def package_archive(target: Path, dependencies: Path) -> None:
@@ -111,8 +128,7 @@ def deploy(config_path: Path, profile: str | None) -> str:
                   "--wait-for-state", "SUCCEEDED"]
         if existing:
             function_id = existing[0]["id"]
-            command(cli + ["fn", "function", "update", "archive-function", "--function-id", function_id,
-                           "--force"] + common)
+            update_function_with_retry(cli, function_id, common)
         else:
             created = json.loads(command(cli + ["fn", "function", "create", "archive-function",
                                         "object-storage", "fn-update-runtime-config",

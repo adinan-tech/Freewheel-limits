@@ -5,10 +5,12 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 
 ROOT = Path(__file__).resolve().parents[1]
 TERRAFORM = ROOT / "terraform"
+IAM_PROPAGATION_WAIT_SECONDS = 90
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from deploy_zip import deploy  # noqa: E402
 
@@ -74,6 +76,13 @@ def apply(config: Path, profile: str | None) -> None:
 
     # 1. First Terraform apply: create the Application, logs, archive policy, and bucket if needed.
     terraform("apply", config, function_id)
+
+    if is_new_stack:
+        print(
+            f"Waiting {IAM_PROPAGATION_WAIT_SECONDS}s for the archive-read IAM policy to propagate...",
+            flush=True,
+        )
+        time.sleep(IAM_PROPAGATION_WAIT_SECONDS)
 
     # 2. Create or update the code-only Function.
     function_id = deploy(config, profile)
